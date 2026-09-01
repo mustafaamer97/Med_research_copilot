@@ -12,11 +12,13 @@ DATA_SOURCE_DESIGNS = {
         "Retrospective Cohort Study",
         "Case-Control Study",
         "Cross-Sectional Study",
+        "Diagnostic Accuracy Study",
     },
     "Registry Database": {
         "Retrospective Cohort Study",
         "Case-Control Study",
         "Cross-Sectional Study",
+        "Diagnostic Accuracy Study",
     },
     "Survey / Questionnaire": {
         "Cross-Sectional Study",
