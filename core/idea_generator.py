@@ -7,25 +7,33 @@ from core.models.research_project import (
 
 
 # ============================================================
-# HELPERS
+# TEXT HELPERS
 # ============================================================
 
 def _clean(value: str) -> str:
     """
-    Safely clean user-provided text.
+    Normalize user-provided text while preserving the
+    original wording as much as possible.
     """
-    return " ".join((value or "").strip().split())
+
+    return " ".join(
+        (value or "").strip().split()
+    )
 
 
 def _has(value: str) -> bool:
     return bool(_clean(value))
 
 
+def _lower(value: str) -> str:
+    return _clean(value).lower()
+
+
 def _unique_ideas(
     ideas: List[ResearchIdea],
 ) -> List[ResearchIdea]:
     """
-    Remove duplicate ideas while preserving order.
+    Remove duplicate ideas while preserving their order.
     """
 
     seen = set()
@@ -33,13 +41,134 @@ def _unique_ideas(
 
     for idea in ideas:
 
-        key = idea.title.strip().lower()
+        key = _lower(idea.title)
 
         if key not in seen:
+
             seen.add(key)
             unique.append(idea)
 
     return unique
+
+
+# ============================================================
+# POPULATION / TOPIC NORMALIZATION
+# ============================================================
+
+def _population_mentions_topic(
+    population: str,
+    topic: str,
+) -> bool:
+    """
+    Determine whether the population already contains
+    the research topic.
+
+    Example:
+
+    Population:
+        Adults with Type 2 Diabetes
+
+    Topic:
+        Type 2 Diabetes Mellitus
+
+    These refer to the same underlying condition, so the
+    topic should not be repeated in the generated title.
+    """
+
+    population_normalized = _lower(population)
+    topic_normalized = _lower(topic)
+
+    if not population_normalized or not topic_normalized:
+        return False
+
+    # Direct containment
+    if topic_normalized in population_normalized:
+        return True
+
+    # Common simplified comparison
+    population_words = set(
+        population_normalized.replace("-", " ").split()
+    )
+
+    topic_words = set(
+        topic_normalized.replace("-", " ").split()
+    )
+
+    # Remove generic words
+    generic_words = {
+        "type",
+        "patients",
+        "patient",
+        "adults",
+        "adult",
+        "children",
+        "child",
+        "with",
+        "the",
+        "of",
+        "and",
+    }
+
+    population_core = (
+        population_words - generic_words
+    )
+
+    topic_core = (
+        topic_words - generic_words
+    )
+
+    if not topic_core:
+        return False
+
+    overlap = population_core.intersection(
+        topic_core
+    )
+
+    # If most meaningful topic words already occur
+    # in the population, avoid repeating the topic.
+    return len(overlap) >= max(
+        1,
+        len(topic_core) * 0.6,
+    )
+
+
+def _format_population(
+    population: str,
+    topic: str,
+) -> str:
+    """
+    Return a clean population phrase.
+
+    If the population already contains the topic,
+    return only the population.
+
+    Otherwise, append the topic naturally.
+    """
+
+    population = _clean(population)
+    topic = _clean(topic)
+
+    if not population:
+        return topic
+
+    if not topic:
+        return population
+
+    if _population_mentions_topic(
+        population,
+        topic,
+    ):
+        return population
+
+    return f"{population} with {topic}"
+
+
+# ============================================================
+# DESIGN HELPERS
+# ============================================================
+
+def _design(context: ResearchContext) -> str:
+    return _clean(context.study_design)
 
 
 # ============================================================
@@ -50,34 +179,55 @@ def assess_idea_context(
     context: ResearchContext,
 ) -> List[str]:
     """
-    Identify missing information that may limit idea generation.
+    Identify missing information that may limit
+    research idea generation.
 
-    These are context/design gaps, NOT literature gaps.
+    IMPORTANT:
+    These are context/design gaps only.
+
+    They are NOT literature gaps.
     """
 
     gaps = []
 
     if not _has(context.research_topic):
-        gaps.append("Research topic is missing.")
+
+        gaps.append(
+            "Research topic is missing."
+        )
 
     if not _has(context.population):
-        gaps.append("Population is missing.")
+
+        gaps.append(
+            "Population is missing."
+        )
 
     if not _has(context.outcome):
-        gaps.append("Primary outcome is missing.")
+
+        gaps.append(
+            "Primary outcome is missing."
+        )
 
     if not _has(context.research_goal):
-        gaps.append("Research goal is missing.")
+
+        gaps.append(
+            "Research goal is missing."
+        )
 
     if not _has(context.data_source):
-        gaps.append("Data source is missing.")
+
+        gaps.append(
+            "Data source is missing."
+        )
 
     if not _has(context.location):
+
         gaps.append(
             "Study location is not specified."
         )
 
     if not _has(context.study_period):
+
         gaps.append(
             "Study period is not specified."
         )
@@ -86,7 +236,7 @@ def assess_idea_context(
 
 
 # ============================================================
-# IDEA QUALITY CHECK
+# IDEA VALIDATION
 # ============================================================
 
 def validate_generated_idea(
@@ -94,90 +244,138 @@ def validate_generated_idea(
     context: ResearchContext,
 ) -> ResearchIdea:
     """
-    Validate that the generated idea remains grounded
-    in the supplied research context.
+    Validate an individual generated research idea.
+
+    Validation is based on the actual content of the idea
+    and the supplied ResearchContext.
+
+    No external evidence is used here.
     """
 
     idea.strengths = []
     idea.limitations = []
     idea.warnings = []
 
+    title = _lower(idea.title)
+
+    topic = _lower(
+        context.research_topic
+    )
+
+    population = _lower(
+        context.population
+    )
+
+    outcome = _lower(
+        context.outcome
+    )
+
+    intervention = _lower(
+        context.intervention_exposure
+    )
+
+    comparator = _lower(
+        context.comparator
+    )
+
     # --------------------------------------------------------
-    # Required components
+    # Topic
     # --------------------------------------------------------
 
-    if _has(context.research_topic):
+    if topic and (
+        topic in title
+        or _population_mentions_topic(
+            population,
+            topic,
+        )
+    ):
+
         idea.strengths.append(
-            "Research topic is clearly defined."
+            "Research topic is represented."
         )
 
-    if _has(context.population):
-        idea.strengths.append(
-            "Target population is specified."
+    else:
+
+        idea.warnings.append(
+            "Research topic is not clearly represented."
         )
 
-    if _has(context.outcome):
+    # --------------------------------------------------------
+    # Population
+    # --------------------------------------------------------
+
+    if population and population in title:
+
         idea.strengths.append(
-            "Primary outcome is specified."
+            "Target population is clearly specified."
         )
 
-    if _has(context.research_goal):
+    elif population:
+
+        idea.warnings.append(
+            "Target population is not clearly represented."
+        )
+
+    # --------------------------------------------------------
+    # Outcome
+    # --------------------------------------------------------
+
+    if outcome and outcome in title:
+
         idea.strengths.append(
-            "Research goal is defined."
+            "Primary outcome is explicitly represented."
+        )
+
+    elif outcome:
+
+        idea.warnings.append(
+            "Primary outcome is not explicitly represented."
         )
 
     # --------------------------------------------------------
     # Intervention / Exposure
     # --------------------------------------------------------
 
-    if _has(context.intervention_exposure):
+    uses_intervention = (
+        bool(intervention)
+        and intervention in title
+    )
+
+    if uses_intervention:
 
         idea.strengths.append(
-            "An intervention or exposure is available."
-        )
-
-    else:
-
-        idea.limitations.append(
-            "No intervention or exposure is specified."
+            "Specified intervention/exposure is used."
         )
 
     # --------------------------------------------------------
     # Comparator
     # --------------------------------------------------------
 
-    if _has(context.comparator):
+    uses_comparator = (
+        bool(comparator)
+        and comparator in title
+    )
+
+    if uses_comparator:
 
         idea.strengths.append(
-            "A comparator is available."
+            "Specified comparator is used."
         )
 
-    else:
-
-        if context.research_goal in {
-            "Treatment Outcomes",
-            "Risk Factors",
-        }:
-
-            idea.limitations.append(
-                "A comparator is not specified; "
-                "this may limit comparative analysis."
-            )
-
     # --------------------------------------------------------
-    # Study design
+    # Design
     # --------------------------------------------------------
 
     if _has(context.study_design):
 
         idea.strengths.append(
-            "A study design is specified."
+            "Study design is specified in the research context."
         )
 
     else:
 
-        idea.warnings.append(
-            "Study design has not been specified."
+        idea.limitations.append(
+            "Study design has not yet been specified."
         )
 
     # --------------------------------------------------------
@@ -200,6 +398,26 @@ def validate_generated_idea(
             "Study period is not specified."
         )
 
+    # --------------------------------------------------------
+    # Comparator-specific limitation
+    # --------------------------------------------------------
+
+    if (
+        context.research_goal
+        in {
+            "Treatment Outcomes",
+            "Risk Factors",
+        }
+        and not comparator
+    ):
+
+        if uses_intervention:
+
+            idea.limitations.append(
+                "No comparator is specified for this "
+                "comparative research context."
+            )
+
     return idea
 
 
@@ -211,17 +429,33 @@ def _generate_treatment_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    intervention = _clean(context.intervention_exposure)
-    comparator = _clean(context.comparator)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    intervention = _clean(
+        context.intervention_exposure
+    )
+
+    comparator = _clean(
+        context.comparator
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     ideas = []
 
     # --------------------------------------------------------
-    # Comparative treatment idea
+    # IDEA 1 — Comparative effectiveness
     # --------------------------------------------------------
 
     if intervention and comparator:
@@ -229,14 +463,14 @@ def _generate_treatment_ideas(
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Comparison of {intervention} and "
-                    f"{comparator} for {outcome} among "
-                    f"{population} with {topic}"
+                    f"Comparison of {intervention} "
+                    f"and {comparator} for {outcome} "
+                    f"among {population}"
                 ),
                 rationale=(
-                    "This idea directly evaluates the specified "
-                    "intervention against the specified comparator "
-                    "using the stated primary outcome."
+                    "This idea directly compares the specified "
+                    "intervention and comparator using the "
+                    "specified primary outcome."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
@@ -244,7 +478,7 @@ def _generate_treatment_ideas(
         )
 
     # --------------------------------------------------------
-    # Intervention-focused idea
+    # IDEA 2 — Association
     # --------------------------------------------------------
 
     if intervention:
@@ -252,12 +486,14 @@ def _generate_treatment_ideas(
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Treatment outcomes associated with "
-                    f"{intervention} in {population} with {topic}"
+                    f"Association between {intervention} "
+                    f"use and {outcome} among "
+                    f"{population}"
                 ),
                 rationale=(
-                    "This idea focuses on the real-world outcome "
-                    "associated with the specified intervention."
+                    "This idea evaluates the association between "
+                    "the specified intervention/exposure and the "
+                    "primary outcome without assuming causation."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
@@ -265,22 +501,48 @@ def _generate_treatment_ideas(
         )
 
     # --------------------------------------------------------
-    # Outcome-focused idea
+    # IDEA 3 — Real-world outcome
     # --------------------------------------------------------
 
-    ideas.append(
-        ResearchIdea(
-            title=(
-                f"{outcome} among {population} with {topic}"
-            ),
-            rationale=(
-                "This idea describes the specified primary "
-                "outcome in the defined population."
-            ),
-            study_design=design,
-            research_goal=context.research_goal,
+    if intervention:
+
+        ideas.append(
+            ResearchIdea(
+                title=(
+                    f"Real-world {outcome} outcomes among "
+                    f"{population} treated with "
+                    f"{intervention}"
+                ),
+                rationale=(
+                    "This idea focuses on the observed real-world "
+                    "outcome among patients receiving the "
+                    "specified intervention."
+                ),
+                study_design=design,
+                research_goal=context.research_goal,
+            )
         )
-    )
+
+    # --------------------------------------------------------
+    # Fallback if no intervention
+    # --------------------------------------------------------
+
+    if not intervention:
+
+        ideas.append(
+            ResearchIdea(
+                title=(
+                    f"{outcome} among {population}"
+                ),
+                rationale=(
+                    "This idea focuses on the specified "
+                    "treatment outcome within the target "
+                    "population."
+                ),
+                study_design=design,
+                research_goal=context.research_goal,
+            )
+        )
 
     return ideas
 
@@ -293,36 +555,59 @@ def _generate_risk_factor_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    exposure = _clean(context.intervention_exposure)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    exposure = _clean(
+        context.intervention_exposure
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     ideas = []
+
+    # --------------------------------------------------------
+    # IDEA 1 — Specific exposure
+    # --------------------------------------------------------
 
     if exposure:
 
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Association between {exposure} and "
-                    f"{outcome} among {population} with {topic}"
+                    f"Association between {exposure} "
+                    f"and {outcome} among "
+                    f"{population}"
                 ),
                 rationale=(
                     "This idea evaluates the relationship between "
-                    "the specified exposure and outcome."
+                    "the specified exposure and outcome without "
+                    "assuming a causal effect."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
             )
         )
 
+    # --------------------------------------------------------
+    # IDEA 2 — Risk factors
+    # --------------------------------------------------------
+
     ideas.append(
         ResearchIdea(
             title=(
                 f"Risk factors associated with {outcome} "
-                f"among {population} with {topic}"
+                f"among {population}"
             ),
             rationale=(
                 "This idea focuses on identifying factors "
@@ -333,16 +618,20 @@ def _generate_risk_factor_ideas(
         )
     )
 
+    # --------------------------------------------------------
+    # IDEA 3 — Factors associated with outcome
+    # --------------------------------------------------------
+
     ideas.append(
         ResearchIdea(
             title=(
                 f"Factors associated with {outcome} "
-                f"in {population} with {topic}"
+                f"in {population}"
             ),
             rationale=(
                 "This idea explores associations with the "
-                "specified outcome without assuming a specific "
-                "causal relationship."
+                "specified outcome while avoiding an assumption "
+                "of causality."
             ),
             study_design=design,
             research_goal=context.research_goal,
@@ -360,40 +649,62 @@ def _generate_survival_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    exposure = _clean(context.intervention_exposure)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    exposure = _clean(
+        context.intervention_exposure
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     ideas = []
+
+    # --------------------------------------------------------
+    # IDEA 1 — Exposure and survival outcome
+    # --------------------------------------------------------
 
     if exposure:
 
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Association between {exposure} and "
-                    f"{outcome} among {population} with {topic}"
+                    f"Association between {exposure} "
+                    f"and {outcome} among "
+                    f"{population}"
                 ),
                 rationale=(
-                    "This idea evaluates the specified exposure "
-                    "in relation to the survival-related outcome."
+                    "This idea evaluates the association between "
+                    "the specified exposure and survival-related "
+                    "outcome."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
             )
         )
 
+    # --------------------------------------------------------
+    # IDEA 2 — Survival outcome
+    # --------------------------------------------------------
+
     ideas.append(
         ResearchIdea(
             title=(
-                f"{outcome} among {population} "
-                f"with {topic}"
+                f"{outcome} among {population}"
             ),
             rationale=(
                 "This idea focuses on the specified survival "
-                "outcome in the target population."
+                "outcome within the target population."
             ),
             study_design=design,
             research_goal=context.research_goal,
@@ -411,33 +722,53 @@ def _generate_incidence_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+    topic = _clean(
+        context.research_topic
+    )
 
-    ideas = [
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
+
+    ideas = []
+
+    # --------------------------------------------------------
+    # IDEA 1 — Incidence
+    # --------------------------------------------------------
+
+    ideas.append(
         ResearchIdea(
             title=(
                 f"Incidence of {outcome} among "
-                f"{population} with {topic}"
+                f"{population}"
             ),
             rationale=(
                 "This idea measures the occurrence of the "
-                "specified outcome in the defined population."
+                "specified outcome in the target population."
             ),
             study_design=design,
             research_goal=context.research_goal,
         )
-    ]
+    )
 
-    if context.study_period:
+    # --------------------------------------------------------
+    # IDEA 2 — Incidence over study period
+    # --------------------------------------------------------
+
+    if _has(context.study_period):
 
         ideas.append(
             ResearchIdea(
                 title=(
                     f"Incidence of {outcome} among "
-                    f"{population} with {topic} during "
+                    f"{population} during "
                     f"{_clean(context.study_period)}"
                 ),
                 rationale=(
@@ -460,16 +791,27 @@ def _generate_prevalence_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     return [
+
         ResearchIdea(
             title=(
                 f"Prevalence of {outcome} among "
-                f"{population} with {topic}"
+                f"{population}"
             ),
             rationale=(
                 "This idea estimates the prevalence of the "
@@ -478,10 +820,11 @@ def _generate_prevalence_ideas(
             study_design=design,
             research_goal=context.research_goal,
         ),
+
         ResearchIdea(
             title=(
                 f"Burden of {outcome} among "
-                f"{population} with {topic}"
+                f"{population}"
             ),
             rationale=(
                 "This idea describes the burden of the "
@@ -490,6 +833,7 @@ def _generate_prevalence_ideas(
             study_design=design,
             research_goal=context.research_goal,
         ),
+
     ]
 
 
@@ -501,17 +845,32 @@ def _generate_trend_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
-    period = _clean(context.study_period)
+    topic = _clean(
+        context.research_topic
+    )
 
-    ideas = [
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
+
+    ideas = []
+
+    # --------------------------------------------------------
+    # IDEA 1 — Temporal trends
+    # --------------------------------------------------------
+
+    ideas.append(
         ResearchIdea(
             title=(
                 f"Temporal trends in {outcome} among "
-                f"{population} with {topic}"
+                f"{population}"
             ),
             rationale=(
                 "This idea evaluates how the specified outcome "
@@ -520,20 +879,24 @@ def _generate_trend_ideas(
             study_design=design,
             research_goal=context.research_goal,
         )
-    ]
+    )
 
-    if period:
+    # --------------------------------------------------------
+    # IDEA 2 — Study period
+    # --------------------------------------------------------
+
+    if _has(context.study_period):
 
         ideas.append(
             ResearchIdea(
                 title=(
                     f"Trends in {outcome} among "
-                    f"{population} with {topic} during "
-                    f"{period}"
+                    f"{population} during "
+                    f"{_clean(context.study_period)}"
                 ),
                 rationale=(
-                    "This idea evaluates temporal changes during "
-                    "the specified study period."
+                    "This idea evaluates temporal changes "
+                    "during the specified study period."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
@@ -551,15 +914,30 @@ def _generate_diagnostic_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
     test_or_exposure = _clean(
         context.intervention_exposure
     )
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     ideas = []
+
+    # --------------------------------------------------------
+    # IDEA 1 — Specific test
+    # --------------------------------------------------------
 
     if test_or_exposure:
 
@@ -567,17 +945,22 @@ def _generate_diagnostic_ideas(
             ResearchIdea(
                 title=(
                     f"Diagnostic accuracy of "
-                    f"{test_or_exposure} for {outcome} "
-                    f"among {population} with {topic}"
+                    f"{test_or_exposure} for "
+                    f"{outcome} among "
+                    f"{population}"
                 ),
                 rationale=(
                     "This idea evaluates the diagnostic performance "
-                    "of the specified test or intervention."
+                    "of the specified test or diagnostic intervention."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
             )
         )
+
+    # --------------------------------------------------------
+    # IDEA 2 — General diagnostic assessment
+    # --------------------------------------------------------
 
     else:
 
@@ -585,8 +968,8 @@ def _generate_diagnostic_ideas(
             ResearchIdea(
                 title=(
                     f"Diagnostic accuracy assessment for "
-                    f"{outcome} among {population} "
-                    f"with {topic}"
+                    f"{outcome} among "
+                    f"{population}"
                 ),
                 rationale=(
                     "This idea focuses on diagnostic accuracy "
@@ -608,16 +991,27 @@ def _generate_prediction_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     return [
+
         ResearchIdea(
             title=(
                 f"Prediction of {outcome} among "
-                f"{population} with {topic}"
+                f"{population}"
             ),
             rationale=(
                 "This idea focuses on prediction of the "
@@ -626,19 +1020,21 @@ def _generate_prediction_ideas(
             study_design=design,
             research_goal=context.research_goal,
         ),
+
         ResearchIdea(
             title=(
                 f"Development of a prediction model for "
-                f"{outcome} among {population} "
-                f"with {topic}"
+                f"{outcome} among "
+                f"{population}"
             ),
             rationale=(
                 "This idea proposes development of a prediction "
-                "model using the defined population and outcome."
+                "model for the defined outcome and population."
             ),
             study_design=design,
             research_goal=context.research_goal,
         ),
+
     ]
 
 
@@ -650,16 +1046,34 @@ def _generate_systematic_review_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
     intervention = _clean(
         context.intervention_exposure
     )
-    comparator = _clean(context.comparator)
-    outcome = _clean(context.outcome)
-    design = _clean(context.study_design)
+
+    comparator = _clean(
+        context.comparator
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
+    design = _design(context)
 
     ideas = []
+
+    # --------------------------------------------------------
+    # Comparative systematic review
+    # --------------------------------------------------------
 
     if intervention and comparator:
 
@@ -668,26 +1082,30 @@ def _generate_systematic_review_ideas(
                 title=(
                     f"Effectiveness of {intervention} "
                     f"compared with {comparator} for "
-                    f"{outcome} among {population} "
-                    f"with {topic}: a systematic review"
+                    f"{outcome} among {population}: "
+                    f"a systematic review"
                 ),
                 rationale=(
-                    "This idea converts the specified comparison "
-                    "into an evidence-synthesis question."
+                    "This idea converts the specified treatment "
+                    "comparison into an evidence-synthesis question."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
             )
         )
 
+    # --------------------------------------------------------
+    # Intervention systematic review
+    # --------------------------------------------------------
+
     elif intervention:
 
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Effectiveness of {intervention} for "
-                    f"{outcome} among {population} "
-                    f"with {topic}: a systematic review"
+                    f"Effectiveness of {intervention} "
+                    f"for {outcome} among "
+                    f"{population}: a systematic review"
                 ),
                 rationale=(
                     "This idea synthesizes evidence about the "
@@ -698,13 +1116,17 @@ def _generate_systematic_review_ideas(
             )
         )
 
+    # --------------------------------------------------------
+    # Outcome systematic review
+    # --------------------------------------------------------
+
     else:
 
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"{outcome} among {population} "
-                    f"with {topic}: a systematic review"
+                    f"{outcome} among {population}: "
+                    f"a systematic review"
                 ),
                 rationale=(
                     "This idea synthesizes available evidence "
@@ -726,39 +1148,57 @@ def _generate_generic_ideas(
     context: ResearchContext,
 ) -> List[ResearchIdea]:
 
-    topic = _clean(context.research_topic)
-    population = _clean(context.population)
-    outcome = _clean(context.outcome)
+    topic = _clean(
+        context.research_topic
+    )
+
+    population = _format_population(
+        context.population,
+        topic,
+    )
+
+    outcome = _clean(
+        context.outcome
+    )
+
     exposure = _clean(
         context.intervention_exposure
     )
-    design = _clean(context.study_design)
+
+    design = _design(context)
 
     ideas = []
+
+    # --------------------------------------------------------
+    # Association idea
+    # --------------------------------------------------------
 
     if exposure:
 
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Association between {exposure} and "
-                    f"{outcome} among {population} "
-                    f"with {topic}"
+                    f"Association between {exposure} "
+                    f"and {outcome} among "
+                    f"{population}"
                 ),
                 rationale=(
                     "This idea uses the available exposure, "
-                    "population, and outcome."
+                    "population, and primary outcome."
                 ),
                 study_design=design,
                 research_goal=context.research_goal,
             )
         )
 
+    # --------------------------------------------------------
+    # Outcome idea
+    # --------------------------------------------------------
+
     ideas.append(
         ResearchIdea(
             title=(
-                f"{outcome} among {population} "
-                f"with {topic}"
+                f"{outcome} among {population}"
             ),
             rationale=(
                 "This idea focuses on the primary outcome "
@@ -773,7 +1213,7 @@ def _generate_generic_ideas(
 
 
 # ============================================================
-# MAIN IDEA GENERATOR
+# MAIN GENERATOR
 # ============================================================
 
 def generate_research_ideas(
@@ -782,74 +1222,102 @@ def generate_research_ideas(
     """
     Generate deterministic research ideas from ResearchContext.
 
-    Important:
-    - No AI
-    - No external evidence
-    - No invented variables
-    - No fabricated literature gaps
+    Design principles:
+
+    1. No AI.
+    2. No external evidence.
+    3. No fabricated variables.
+    4. No fabricated literature gaps.
+    5. Every idea must remain grounded in the context.
+    6. Ideas should differ in research angle where possible.
+    7. Maximum of five ideas are returned.
     """
 
-    # --------------------------------------------------------
-    # Check minimum context
-    # --------------------------------------------------------
+    # ========================================================
+    # MINIMUM CONTEXT
+    # ========================================================
 
-    missing = assess_idea_context(context)
+    missing = assess_idea_context(
+        context
+    )
 
     if missing:
 
         return []
 
-    goal = _clean(context.research_goal)
+    goal = _clean(
+        context.research_goal
+    )
 
-    # --------------------------------------------------------
-    # Select generation strategy
-    # --------------------------------------------------------
+    # ========================================================
+    # GENERATION STRATEGY
+    # ========================================================
 
     if goal == "Treatment Outcomes":
 
-        ideas = _generate_treatment_ideas(context)
+        ideas = _generate_treatment_ideas(
+            context
+        )
 
     elif goal == "Risk Factors":
 
-        ideas = _generate_risk_factor_ideas(context)
+        ideas = _generate_risk_factor_ideas(
+            context
+        )
 
     elif goal == "Survival Analysis":
 
-        ideas = _generate_survival_ideas(context)
+        ideas = _generate_survival_ideas(
+            context
+        )
 
     elif goal == "Incidence":
 
-        ideas = _generate_incidence_ideas(context)
+        ideas = _generate_incidence_ideas(
+            context
+        )
 
     elif goal == "Prevalence":
 
-        ideas = _generate_prevalence_ideas(context)
+        ideas = _generate_prevalence_ideas(
+            context
+        )
 
     elif goal == "Trend Analysis":
 
-        ideas = _generate_trend_ideas(context)
+        ideas = _generate_trend_ideas(
+            context
+        )
 
     elif goal == "Diagnostic Accuracy":
 
-        ideas = _generate_diagnostic_ideas(context)
+        ideas = _generate_diagnostic_ideas(
+            context
+        )
 
     elif goal == "Prediction Model":
 
-        ideas = _generate_prediction_ideas(context)
+        ideas = _generate_prediction_ideas(
+            context
+        )
 
     elif goal == "Systematic Review":
 
-        ideas = _generate_systematic_review_ideas(context)
+        ideas = _generate_systematic_review_ideas(
+            context
+        )
 
     else:
 
-        ideas = _generate_generic_ideas(context)
+        ideas = _generate_generic_ideas(
+            context
+        )
 
-    # --------------------------------------------------------
-    # Validate every idea
-    # --------------------------------------------------------
+    # ========================================================
+    # VALIDATE
+    # ========================================================
 
-    validated = []
+    validated_ideas = []
 
     for idea in ideas:
 
@@ -858,16 +1326,20 @@ def generate_research_ideas(
             context,
         )
 
-        validated.append(validated_idea)
+        validated_ideas.append(
+            validated_idea
+        )
 
-    # --------------------------------------------------------
-    # Remove duplicates
-    # --------------------------------------------------------
+    # ========================================================
+    # REMOVE DUPLICATES
+    # ========================================================
 
-    validated = _unique_ideas(validated)
+    validated_ideas = _unique_ideas(
+        validated_ideas
+    )
 
-    # --------------------------------------------------------
-    # Limit output
-    # --------------------------------------------------------
+    # ========================================================
+    # LIMIT
+    # ========================================================
 
-    return validated[:5]
+    return validated_ideas[:5]
