@@ -1,83 +1,64 @@
+# ============================================================
+# Med Research Copilot
+# Step 2 — Research Idea Generation & Gap Analysis
+# Version: 0.2
+# ============================================================
+
+from __future__ import annotations
+
 import streamlit as st
 
 from core.idea_generator import (
-    assess_idea_context,
-    generate_research_ideas,
+    assess_context_gaps,
+    generate_and_rank_research_ideas,
 )
-
-from core.models.research_project import (
-    ResearchProject,
-)
+from core.models.research_project import ResearchProject
 
 
 # ============================================================
-# STEP 2 UI
+# UI helpers
 # ============================================================
 
-def render_step2(project: ResearchProject) -> None:
+def _score_label(score: int) -> str:
+    if score >= 80:
+        return "🟢 Strong Candidate"
+    if score >= 65:
+        return "🟡 Good Candidate"
+    if score >= 50:
+        return "🟠 Needs Refinement"
 
-    st.header(
-        "💡 Step 2: Research Idea & Gap Analysis"
-    )
+    return "🔴 Reject / Regenerate"
 
-    st.caption(
-        "Generate structured research ideas from the "
-        "validated research context."
-    )
 
+def _show_context(project: ResearchProject) -> None:
     context = project.context
 
-    # ========================================================
-    # STEP 1 CHECK
-    # ========================================================
-
-    if project.has_errors:
-
-        st.error(
-            "Step 1 contains validation errors. "
-            "Please fix them before generating research ideas."
-        )
-
-        return
-
-    if not context.research_topic:
-
-        st.warning(
-            "Please complete Step 1 before continuing."
-        )
-
-        return
-
-    # ========================================================
-    # RESEARCH CONTEXT SUMMARY
-    # ========================================================
-
-    st.subheader(
-        "📋 Research Context"
-    )
+    st.subheader("📋 Research Context")
 
     col1, col2 = st.columns(2)
 
     with col1:
-
         st.write(
-            f"**Topic:** {context.research_topic}"
+            f"**Research Topic:** "
+            f"{context.research_topic or 'Not specified'}"
         )
 
         st.write(
-            f"**Population:** {context.population}"
+            f"**Population:** "
+            f"{context.population or 'Not specified'}"
         )
 
         st.write(
-            f"**Outcome:** {context.outcome}"
+            f"**Outcome:** "
+            f"{context.outcome or 'Not specified'}"
         )
 
         st.write(
-            f"**Research Goal:** {context.research_goal}"
+            f"**Research Goal:** "
+            f"{context.research_goal or 'Not specified'}"
         )
 
     with col2:
-
         st.write(
             f"**Intervention / Exposure:** "
             f"{context.intervention_exposure or 'Not specified'}"
@@ -90,240 +71,507 @@ def render_step2(project: ResearchProject) -> None:
 
         st.write(
             f"**Data Source:** "
-            f"{context.data_source}"
+            f"{context.data_source or 'Not specified'}"
         )
 
         st.write(
             f"**Study Design:** "
-            f"{context.study_design}"
+            f"{context.study_design or 'Auto Detect'}"
         )
 
-    st.divider()
 
-    # ========================================================
-    # CONTEXT GAPS
-    # ========================================================
+def _show_context_gaps(
+    project: ResearchProject,
+) -> bool:
+    """
+    Show context gaps.
 
-    st.subheader(
-        "🔎 Context & Design Gaps"
+    Returns True when essential information is missing.
+    """
+
+    gaps = assess_context_gaps(
+        project.context
     )
 
-    gaps = assess_idea_context(context)
+    st.subheader("🔎 Context & Design Check")
 
-    if gaps:
+    essential_missing = {
+        "Research topic is missing.",
+        "Target population is missing.",
+        "Primary outcome is missing.",
+        "Research goal is missing.",
+        "Available data source is missing.",
+    }
 
-        for gap in gaps:
+    hard_gaps = [
+        gap
+        for gap in gaps
+        if gap in essential_missing
+    ]
 
-            st.warning(gap)
+    soft_gaps = [
+        gap
+        for gap in gaps
+        if gap not in essential_missing
+    ]
+
+    if hard_gaps:
+        st.error(
+            "Idea generation cannot proceed because "
+            "essential research context is missing."
+        )
+
+        for gap in hard_gaps:
+            st.write(f"• {gap}")
+
+        return True
+
+    if soft_gaps:
+        st.warning(
+            "The context is sufficient for preliminary idea "
+            "generation, but some elements should be refined."
+        )
+
+        for gap in soft_gaps:
+            st.write(f"• {gap}")
 
     else:
-
         st.success(
             "The research context contains the minimum "
-            "information required for idea generation."
+            "information required for idea generation.",
+            icon="✅",
         )
 
     st.info(
-        "Note: These are context/design gaps only. "
-        "A true literature gap will be assessed later "
-        "after evidence retrieval."
+        "These are context/design checks only. "
+        "A true literature gap or novelty claim will be assessed "
+        "later after evidence retrieval.",
+        icon="ℹ️",
     )
 
-    st.divider()
+    return False
 
-    # ========================================================
-    # GENERATE IDEAS
-    # ========================================================
+
+def _show_assessment(
+    assessment: dict,
+) -> None:
+
+    score = assessment["score"]
+    rating = assessment["rating"]
+
+    st.metric(
+        "Idea Quality Score",
+        f"{score}/100",
+    )
+
+    st.write(
+        f"**Classification:** {_score_label(score)}"
+    )
+
+    if assessment.get("issues"):
+        st.error("Issues")
+
+        for issue in assessment["issues"]:
+            st.write(f"• {issue}")
+
+    if assessment.get("warnings"):
+        st.warning("Warnings")
+
+        for warning in assessment["warnings"]:
+            st.write(f"• {warning}")
+
+    feasibility = assessment.get(
+        "feasibility",
+        [],
+    )
+
+    if feasibility:
+        st.write("**Feasibility signals:**")
+
+        for item in feasibility:
+            st.write(f"• {item}")
+
+    feasibility_warnings = assessment.get(
+        "feasibility_warnings",
+        [],
+    )
+
+    if feasibility_warnings:
+        st.write("**Feasibility limitations:**")
+
+        for item in feasibility_warnings:
+            st.write(f"• {item}")
+
+    st.info(
+        "Novelty status: Not assessed yet. "
+        "Literature search is required before claiming a "
+        "research gap or novelty.",
+        icon="🔬",
+    )
+
+
+def _show_idea_card(
+    project: ResearchProject,
+    index: int,
+    idea,
+    assessment: dict,
+) -> None:
+
+    score = assessment["score"]
+
+    st.markdown("---")
 
     st.subheader(
-        "💡 Generate Research Ideas"
+        f"Idea {index + 1}: {idea.title}"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write(
+            f"**Research Goal:** "
+            f"{idea.research_goal}"
+        )
+
+    with col2:
+        st.write(
+            f"**Study Design:** "
+            f"{idea.study_design}"
+        )
+
+    st.write(
+        f"**Quality:** {_score_label(score)} "
+        f"— **{score}/100**"
+    )
+
+    st.write("### 💡 Rationale")
+
+    st.write(idea.rationale)
+
+    strengths = list(
+        dict.fromkeys(
+            idea.strengths
+            + assessment.get("strengths", [])
+        )
+    )
+
+    if strengths:
+        st.write("### ✅ Strengths")
+
+        for strength in strengths:
+            st.success(
+                strength,
+                icon="✅",
+            )
+
+    if idea.limitations:
+        st.write("### ⚠️ Limitations")
+
+        for limitation in idea.limitations:
+            st.warning(
+                limitation,
+                icon="⚠️",
+            )
+
+    _show_assessment(
+        assessment
+    )
+
+    # --------------------------------------------------------
+    # Selection
+    # --------------------------------------------------------
+
+    already_selected = (
+        project.selected_idea is idea
+    )
+
+    button_label = (
+        "✓ Selected"
+        if already_selected
+        else "Select This Idea"
     )
 
     if st.button(
-        "Generate Research Ideas",
-        type="primary",
+        button_label,
+        key=f"select_idea_{index}",
         use_container_width=True,
+        disabled=already_selected,
     ):
+        project.select_idea(index)
 
-        ideas = generate_research_ideas(
-            context
-        )
+        st.session_state[
+            "step2_selected_index"
+        ] = index
 
-        project.generated_ideas = ideas
-        project.selected_idea = None
+        st.rerun()
 
-        if ideas:
 
-            st.success(
-                f"{len(ideas)} research ideas generated."
-            )
+# ============================================================
+# Selected idea
+# ============================================================
 
-        else:
+def _show_selected_idea(
+    project: ResearchProject,
+) -> None:
 
-            st.error(
-                "Unable to generate research ideas. "
-                "Please complete the required research context."
-            )
-
-    # ========================================================
-    # DISPLAY IDEAS
-    # ========================================================
-
-    if not project.generated_ideas:
-
-        st.info(
-            "Click **Generate Research Ideas** "
-            "to create candidate research questions."
-        )
-
+    if project.selected_idea is None:
         return
 
-    st.divider()
+    st.markdown("---")
+
+    st.subheader(
+        "🎯 Selected Research Idea"
+    )
+
+    idea = project.selected_idea
+
+    st.success(
+        idea.title,
+        icon="🎯",
+    )
+
+    st.write(
+        f"**Research Goal:** {idea.research_goal}"
+    )
+
+    st.write(
+        f"**Study Design:** {idea.study_design}"
+    )
+
+    st.write("**Rationale:**")
+
+    st.write(idea.rationale)
+
+    st.info(
+        "This selected idea will be used as the starting point "
+        "for Step 3 — Research Question.",
+        icon="➡️",
+    )
+
+
+# ============================================================
+# Main Step 2
+# ============================================================
+
+def render_step2(
+    project: ResearchProject,
+) -> None:
+
+    st.title(
+        "💡 Step 2: Research Idea Generation & Gap Analysis"
+    )
+
+    st.caption(
+        "Generate, validate, rank, and select a research idea "
+        "using deterministic medical research rules."
+    )
+
+    # --------------------------------------------------------
+    # Context
+    # --------------------------------------------------------
+
+    _show_context(project)
+
+    st.markdown("---")
+
+    # --------------------------------------------------------
+    # Context validation
+    # --------------------------------------------------------
+
+    has_hard_gaps = _show_context_gaps(
+        project
+    )
+
+    if has_hard_gaps:
+        st.stop()
+
+    # --------------------------------------------------------
+    # Existing validation errors from Step 1
+    # --------------------------------------------------------
+
+    if project.has_errors:
+        st.error(
+            "The Research Context contains validation errors. "
+            "Please return to Step 1 and correct them before "
+            "generating research ideas."
+        )
+
+        for message in project.validation_messages:
+            if message.level == "ERROR":
+                st.write(
+                    f"• **{message.field}:** "
+                    f"{message.message}"
+                )
+
+        st.stop()
+
+    # --------------------------------------------------------
+    # Generate ideas
+    # --------------------------------------------------------
+
+    st.markdown("---")
 
     st.subheader(
         "🧠 Candidate Research Ideas"
     )
 
-    for index, idea in enumerate(
-        project.generated_ideas,
+    st.write(
+        "The system will generate up to five structurally "
+        "different candidate ideas and rank them using "
+        "research-context alignment, goal alignment, outcome "
+        "clarity, population fit, study-design fit, feasibility, "
+        "and preliminary distinctiveness."
+    )
+
+    if st.button(
+        "🚀 Generate & Rank Research Ideas",
+        type="primary",
+        use_container_width=True,
+    ):
+
+        ranked_ideas = (
+            generate_and_rank_research_ideas(
+                project.context,
+                max_ideas=5,
+            )
+        )
+
+        project.clear_ideas()
+
+        for idea, _assessment in ranked_ideas:
+            project.generated_ideas.append(
+                idea
+            )
+
+        st.session_state[
+            "step2_generated"
+        ] = True
+
+        st.session_state[
+            "step2_ranked_assessments"
+        ] = ranked_ideas
+
+        st.session_state[
+            "step2_selected_index"
+        ] = None
+
+        st.rerun()
+
+    # --------------------------------------------------------
+    # Results
+    # --------------------------------------------------------
+
+    ranked_ideas = st.session_state.get(
+        "step2_ranked_assessments",
+        [],
+    )
+
+    if not ranked_ideas:
+        if project.generated_ideas:
+            ranked_ideas = [
+                (
+                    idea,
+                    {
+                        "score": 0,
+                        "rating": "Not assessed",
+                        "strengths": [],
+                        "warnings": [],
+                        "issues": [],
+                        "feasibility": [],
+                        "feasibility_warnings": [],
+                        "novelty_status": "Not assessed yet",
+                    },
+                )
+                for idea in project.generated_ideas
+            ]
+        else:
+            st.info(
+                "Click **Generate & Rank Research Ideas** "
+                "to create candidate ideas."
+            )
+
+            st.stop()
+
+    # --------------------------------------------------------
+    # Ranking summary
+    # --------------------------------------------------------
+
+    st.success(
+        f"{len(ranked_ideas)} candidate idea(s) generated "
+        "and ranked.",
+        icon="🏆",
+    )
+
+    st.subheader(
+        "🏆 Ranked Candidates"
+    )
+
+    for rank, (idea, assessment) in enumerate(
+        ranked_ideas,
         start=1,
     ):
 
-        with st.container(
-            border=True
-        ):
+        score = assessment["score"]
 
-            st.markdown(
-                f"### Idea {index}"
-            )
-
-            st.markdown(
-                f"**{idea.title}**"
-            )
-
-            st.write(
-                idea.rationale
-            )
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-
-                st.write(
-                    f"**Research Goal:** "
-                    f"{idea.research_goal}"
-                )
-
-            with col2:
-
-                st.write(
-                    f"**Study Design:** "
-                    f"{idea.study_design or 'Not specified'}"
-                )
-
-            # ------------------------------------------------
-            # Strengths
-            # ------------------------------------------------
-
-            if idea.strengths:
-
-                st.markdown(
-                    "**Strengths**"
-                )
-
-                for strength in idea.strengths:
-
-                    st.success(
-                        strength,
-                        icon="✅",
-                    )
-
-            # ------------------------------------------------
-            # Limitations
-            # ------------------------------------------------
-
-            if idea.limitations:
-
-                st.markdown(
-                    "**Limitations / Missing Information**"
-                )
-
-                for limitation in idea.limitations:
-
-                    st.warning(
-                        limitation,
-                        icon="!",
-                    )
-
-            # ------------------------------------------------
-            # Warnings
-            # ------------------------------------------------
-
-            if idea.warnings:
-
-                for warning in idea.warnings:
-
-                    st.warning(
-                        warning
-                    )
-
-            # ------------------------------------------------
-            # Select idea
-            # ------------------------------------------------
-
-            selected = (
-                project.selected_idea is idea
-            )
-
-            button_label = (
-                "✓ Selected"
-                if selected
-                else "Select This Idea"
-            )
-
-            if st.button(
-                button_label,
-                key=f"select_idea_{index}",
-                use_container_width=True,
-            ):
-
-                project.select_idea(index - 1)
-
-                st.rerun()
-
-    # ========================================================
-    # SELECTED IDEA
-    # ========================================================
-
-    if project.selected_idea:
-
-        st.divider()
-
-        st.subheader(
-            "✅ Selected Research Idea"
-        )
-
-        selected = project.selected_idea
-
-        st.success(
-            selected.title
+        st.write(
+            f"**#{rank} — {score}/100 — "
+            f"{assessment['rating']}**"
         )
 
         st.write(
-            f"**Rationale:** {selected.rationale}"
+            f"**{idea.title}**"
         )
 
-        st.write(
-            f"**Research Goal:** "
-            f"{selected.research_goal}"
+    # --------------------------------------------------------
+    # Top 3
+    # --------------------------------------------------------
+
+    st.markdown("---")
+
+    st.subheader(
+        "⭐ Top Research Ideas"
+    )
+
+    top_ideas = ranked_ideas[:3]
+
+    for index, (idea, assessment) in enumerate(
+        top_ideas
+    ):
+        _show_idea_card(
+            project=project,
+            index=index,
+            idea=idea,
+            assessment=assessment,
         )
 
-        st.write(
-            f"**Study Design:** "
-            f"{selected.study_design or 'Not specified'}"
-        )
+    # --------------------------------------------------------
+    # Novelty notice
+    # --------------------------------------------------------
 
-        st.info(
-            "This selected idea will be used as the starting "
-            "point for Step 3: Research Question."
-        )
+    st.markdown("---")
+
+    st.subheader(
+        "🔬 Novelty & Literature Gap"
+    )
+
+    st.info(
+        """
+**Not assessed yet.**
+
+The current Step 2 version does **not** claim that any idea is
+novel or that a literature gap exists.
+
+A defensible literature-gap assessment requires actual evidence
+retrieval and review, which will be handled in the later
+Literature Search / Evidence Screening stages.
+""",
+        icon="🔬",
+    )
+
+    # --------------------------------------------------------
+    # Selected idea
+    # --------------------------------------------------------
+
+    _show_selected_idea(
+        project
+    )
