@@ -486,7 +486,7 @@ def _generate_treatment_ideas(
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Association between {intervention} "
+                    f"Association between {intervention.rstrip('s')} "
                     f"use and {outcome} among "
                     f"{population}"
                 ),
@@ -509,7 +509,7 @@ def _generate_treatment_ideas(
         ideas.append(
             ResearchIdea(
                 title=(
-                    f"Real-world {outcome} outcomes among "
+                    f"Real-world {outcome} among "
                     f"{population} treated with "
                     f"{intervention}"
                 ),
