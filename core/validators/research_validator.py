@@ -36,6 +36,17 @@ def _detect_outcome_categories(outcome: str) -> set[str]:
                 detected.add(category)
                 break
 
+    # Risk-factor style outcomes
+    normalized = _normalize(outcome)
+
+    if (
+        "development of" in normalized
+        or "occurrence of" in normalized
+        or "new onset" in normalized
+        or normalized.startswith("risk of")
+    ):
+        detected.add("incidence")
+
     return detected
 
 
