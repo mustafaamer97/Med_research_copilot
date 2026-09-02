@@ -87,6 +87,11 @@ OUTCOME_KEYWORDS = {
         "new cases",
         "incident cases",
         "incidence rate",
+        "development of",
+        "occurrence of",
+        "new onset",
+        "incident",
+        "risk of",
     },
 
     "prevalence": {
@@ -102,6 +107,14 @@ OUTCOME_KEYWORDS = {
         "annual change",
         "yearly change",
         "change over time",
+        "annual incidence",
+        "annual prevalence",
+        "annual mortality",
+        "yearly incidence",
+        "yearly prevalence",
+        "yearly mortality",
+        "over time",
+        "temporal change",
     },
 
     "treatment": {
@@ -155,9 +168,7 @@ GOAL_OUTCOME_CATEGORIES = {
 
     "Risk Factors": {
         "incidence",
-        "prevalence",
         "survival",
-        "treatment",
     },
 
     "Prediction Model": {
