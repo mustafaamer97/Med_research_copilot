@@ -235,7 +235,7 @@ def render_step2(project: ResearchProject) -> None:
 
                     st.success(
                         strength,
-                        icon="✓",
+                        icon="✅",
                     )
 
             # ------------------------------------------------
