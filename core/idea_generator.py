@@ -868,11 +868,19 @@ def validate_generated_idea(
 
     return {
         "score": final_score,
+
         "quality": quality,
+        "rating": quality,
+        "classification": quality,
+
         "strengths": _unique_preserve_order(strengths),
         "limitations": _unique_preserve_order(limitations),
         "warnings": _unique_preserve_order(warnings),
+
         "novelty_status": "Not assessed yet",
+        "novelty": "Not assessed yet",
+
+        "idea_quality": final_score,
     }
 
 
@@ -1607,15 +1615,20 @@ def rank_ideas(
                     break
 
         assessment["score"] = max(0, min(100, score))
+        assessment["idea_quality"] = assessment["score"]
 
         if assessment["score"] >= 90:
-            assessment["quality"] = "Strong Candidate"
+            quality = "Strong Candidate"
         elif assessment["score"] >= 80:
-            assessment["quality"] = "Good Candidate"
+            quality = "Good Candidate"
         elif assessment["score"] >= 70:
-            assessment["quality"] = "Moderate Candidate"
+            quality = "Moderate Candidate"
         else:
-            assessment["quality"] = "Needs Refinement"
+            quality = "Needs Refinement"
+
+        assessment["quality"] = quality
+        assessment["rating"] = quality
+        assessment["classification"] = quality
 
         ranked.append(
             (
