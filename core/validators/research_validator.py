@@ -37,8 +37,6 @@ def _detect_outcome_categories(outcome: str) -> set[str]:
                 break
 
     # Risk-factor style outcomes
-    normalized = _normalize(outcome)
-
     if (
         "development of" in normalized
         or "occurrence of" in normalized
@@ -46,6 +44,34 @@ def _detect_outcome_categories(outcome: str) -> set[str]:
         or normalized.startswith("risk of")
     ):
         detected.add("incidence")
+
+    # Trend-style outcomes
+    if (
+        "annual" in normalized
+        and "incidence" in normalized
+    ):
+        detected.add("trend")
+
+    if (
+        "yearly" in normalized
+        and "incidence" in normalized
+    ):
+        detected.add("trend")
+
+    if (
+        "annual" in normalized
+        and "mortality" in normalized
+    ):
+        detected.add("trend")
+
+    if (
+        "yearly" in normalized
+        and "mortality" in normalized
+    ):
+        detected.add("trend")
+
+    if "over time" in normalized:
+        detected.add("trend")
 
     return detected
 
