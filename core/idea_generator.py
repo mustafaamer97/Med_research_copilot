@@ -1646,9 +1646,30 @@ def rank_ideas(
 
 def generate_and_rank_research_ideas(
     context: ResearchContext,
+    max_ideas: int | None = None,
 ) -> List[Tuple[ResearchIdea, Dict]]:
     """
     Main Step 2 API.
+
+    Parameters
+    ----------
+    context:
+        Current ResearchContext.
+
+    max_ideas:
+        Optional maximum number of ideas to return.
+        If None, all generated ideas are returned.
+
+    Returns
+    -------
+    List[Tuple[ResearchIdea, Dict]]
+        Ranked ideas with their deterministic quality assessments.
+
+    Notes
+    -----
+    - No AI is used.
+    - No literature gap is claimed.
+    - Novelty is not assessed at this stage.
     """
 
     ideas = generate_research_ideas(context)
@@ -1656,7 +1677,15 @@ def generate_and_rank_research_ideas(
     if not ideas:
         return []
 
-    return rank_ideas(
+    ranked = rank_ideas(
         ideas,
         context,
     )
+
+    if max_ideas is not None:
+        if max_ideas <= 0:
+            return []
+
+        ranked = ranked[:max_ideas]
+
+    return ranked
