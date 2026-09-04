@@ -12,6 +12,10 @@ from workflow.step2_ideas import (
     render_step2,
 )
 
+from workflow.step3_question import (
+    render_step3,
+)
+
 
 # ============================================================
 # PAGE CONFIG
@@ -64,6 +68,7 @@ step = st.sidebar.radio(
     [
         "Step 1 — Research Context",
         "Step 2 — Research Ideas",
+        "Step 3 — Research Question",
     ],
 )
 
@@ -87,7 +92,16 @@ elif step == "Step 2 — Research Ideas":
 
 
 # ============================================================
-# CURRENT CONTEXT
+# STEP 3
+# ============================================================
+
+elif step == "Step 3 — Research Question":
+
+    render_step3(project)
+
+
+# ============================================================
+# CURRENT CONTEXT / PROJECT STATUS
 # ============================================================
 
 st.sidebar.divider()
