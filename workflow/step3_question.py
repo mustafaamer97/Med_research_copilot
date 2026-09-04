@@ -10,9 +10,9 @@ from core.question_builder import (
 )
 
 
-# ==========================================
-# Step 3
-# ==========================================
+# ============================================================
+# Step 3 — Research Question Builder
+# ============================================================
 
 def render_step3(project):
 
@@ -20,15 +20,16 @@ def render_step3(project):
 
     context = project.context
 
-    final_idea = context.get(
-        "final_research_idea",
-        ""
-    )
+    # --------------------------------------------------------
+    # Selected idea
+    # --------------------------------------------------------
+
+    final_idea = context.final_research_idea
 
     if not final_idea:
 
         st.warning(
-            "Please complete Step 2 and save a final research idea first."
+            "Please complete Step 2 and select a research idea first."
         )
 
         return
@@ -39,123 +40,134 @@ def render_step3(project):
 
     st.divider()
 
-    # ==========================================
-    # Generate Outputs
-    # ==========================================
+    # --------------------------------------------------------
+    # Generate package
+    # --------------------------------------------------------
 
     if st.button(
-        "Generate Research Question Package",
+        "🚀 Generate Research Question Package",
         type="primary",
         use_container_width=True,
     ):
 
-        context["research_question"] = (
+        context.research_question = (
             build_research_question(context)
         )
 
-        context["primary_objective"] = (
+        context.primary_objective = (
             build_primary_objective(context)
         )
 
-        context["research_hypothesis"] = (
+        context.research_hypothesis = (
             build_hypothesis(context)
         )
 
-        context["framework"] = (
+        context.framework = (
             build_framework(context)
         )
 
-        context["search_query"] = (
+        context.search_query = (
             build_search_query(context)
         )
 
-    # ==========================================
-    # Display Results
-    # ==========================================
+        st.success(
+            "Research Question Package generated successfully."
+        )
 
-    if context.get("research_question"):
+    # --------------------------------------------------------
+    # Research Question
+    # --------------------------------------------------------
+
+    if context.research_question:
 
         st.subheader("Research Question")
 
-        edited_question = st.text_area(
+        context.research_question = st.text_area(
             "Edit Research Question",
-            value=context["research_question"],
+            value=context.research_question,
             height=120,
         )
 
-        context["research_question"] = edited_question
+    # --------------------------------------------------------
+    # Objective
+    # --------------------------------------------------------
 
-    if context.get("primary_objective"):
+    if context.primary_objective:
 
         st.subheader("Primary Objective")
 
-        edited_objective = st.text_area(
+        context.primary_objective = st.text_area(
             "Edit Primary Objective",
-            value=context["primary_objective"],
+            value=context.primary_objective,
             height=120,
         )
 
-        context["primary_objective"] = edited_objective
+    # --------------------------------------------------------
+    # Hypothesis
+    # --------------------------------------------------------
 
-    if context.get("research_hypothesis"):
+    if context.research_hypothesis:
 
         st.subheader("Research Hypothesis")
 
-        edited_hypothesis = st.text_area(
+        context.research_hypothesis = st.text_area(
             "Edit Research Hypothesis",
-            value=context["research_hypothesis"],
+            value=context.research_hypothesis,
             height=120,
         )
 
-        context["research_hypothesis"] = edited_hypothesis
+    # --------------------------------------------------------
+    # Framework
+    # --------------------------------------------------------
 
-    # ==========================================
-    # PICO / PECO
-    # ==========================================
-
-    framework = context.get("framework")
-
-    if framework:
+    if context.framework:
 
         st.subheader(
-            framework.get(
+            context.framework.get(
                 "framework_type",
-                "Framework"
+                "Framework",
             )
         )
 
-        st.json(framework)
-
-    # ==========================================
-    # Search Query
-    # ==========================================
-
-    if context.get("search_query"):
-
-        st.subheader("Search Query")
-
-        edited_query = st.text_area(
-            "Edit Search Query",
-            value=context["search_query"],
-            height=120,
+        st.json(
+            context.framework
         )
 
-        context["search_query"] = edited_query
+    # --------------------------------------------------------
+    # Search Query
+    # --------------------------------------------------------
+
+    if context.search_query:
+
+        st.subheader(
+            "Search Query"
+        )
+
+        context.search_query = st.text_area(
+            "Edit Search Query",
+            value=context.search_query,
+            height=140,
+        )
 
     st.divider()
 
-    # ==========================================
+    # --------------------------------------------------------
     # Validation
-    # ==========================================
+    # --------------------------------------------------------
 
     if st.button(
-        "Validate Step 3",
+        "✅ Validate Step 3",
         use_container_width=True,
     ):
 
-        validation = validate_step3(context)
+        validation = validate_step3(
+            context
+        )
 
-        score = validation["score"]
+        score = validation.get(
+            "score",
+            0,
+        )
 
         if score >= 85:
 
@@ -175,73 +187,80 @@ def render_step3(project):
                 f"Incomplete ({score}/100)"
             )
 
-        for issue in validation["issues"]:
-
+        for issue in validation.get(
+            "issues",
+            [],
+        ):
             st.warning(issue)
 
-    # ==========================================
-    # Save Final Package
-    # ==========================================
+    # --------------------------------------------------------
+    # Save Step 3
+    # --------------------------------------------------------
 
     if st.button(
-        "Save Step 3 Outputs",
+        "💾 Save Step 3 Outputs",
         type="primary",
         use_container_width=True,
     ):
 
-        validation = validate_step3(context)
+        validation = validate_step3(
+            context
+        )
 
-        if validation["score"] < 60:
+        if validation.get(
+            "score",
+            0,
+        ) < 60:
 
             st.error(
-                "Please complete the missing components before saving."
+                "Please complete missing elements before saving."
             )
 
             return
 
-        context["step3_completed"] = True
+        context.step3_completed = True
 
         st.success(
             "Step 3 completed successfully."
         )
 
-    # ==========================================
-    # Final Package Preview
-    # ==========================================
+    # --------------------------------------------------------
+    # Final package
+    # --------------------------------------------------------
 
-    if context.get("step3_completed"):
+    if context.step3_completed:
 
         st.divider()
 
         st.subheader(
-            "📦 Research Package"
+            "📦 Research Package Preview"
         )
 
         st.markdown(
             f"""
 ### Research Idea
-{context.get("final_research_idea", "")}
+{context.final_research_idea}
 
 ### Research Question
-{context.get("research_question", "")}
+{context.research_question}
 
 ### Primary Objective
-{context.get("primary_objective", "")}
+{context.primary_objective}
 
 ### Hypothesis
-{context.get("research_hypothesis", "")}
+{context.research_hypothesis}
 
 ### Search Query
-{context.get("search_query", "")}
+{context.search_query}
 """
         )
 
-        if context.get("framework"):
+        if context.framework:
 
             st.subheader(
                 "Framework"
             )
 
             st.json(
-                context["framework"]
+                context.framework
             )
