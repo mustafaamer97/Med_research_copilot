@@ -13,21 +13,28 @@ from core.rules.research_rules import (
 )
 
 
+# ============================================================
+# Helpers
+# ============================================================
+
 def _normalize(text: str) -> str:
     return " ".join(text.lower().strip().split())
 
 
-def _detect_outcome_categories(outcome: str) -> set[str]:
+def _detect_outcome_categories(
+    outcome: str,
+) -> set[str]:
     """
-    Detect broad outcome categories from the user's outcome text.
+    Detect broad outcome categories from the outcome text.
 
-    This is intentionally conservative.
-    Failure to detect a category does NOT mean the outcome is invalid.
+    Conservative classification:
+    Failure to detect a category does not imply
+    that the outcome is invalid.
     """
 
     normalized = _normalize(outcome)
 
-    detected = set()
+    detected: set[str] = set()
 
     for category, keywords in OUTCOME_KEYWORDS.items():
 
@@ -37,7 +44,10 @@ def _detect_outcome_categories(outcome: str) -> set[str]:
                 detected.add(category)
                 break
 
-    # Risk-factor style outcomes
+    # -----------------------------------------
+    # Extra deterministic rules
+    # -----------------------------------------
+
     if (
         "development of" in normalized
         or "occurrence of" in normalized
@@ -46,7 +56,6 @@ def _detect_outcome_categories(outcome: str) -> set[str]:
     ):
         detected.add("incidence")
 
-    # Trend-style outcomes
     if (
         "annual" in normalized
         and "incidence" in normalized
@@ -77,6 +86,10 @@ def _detect_outcome_categories(outcome: str) -> set[str]:
     return detected
 
 
+# ============================================================
+# Main Validator
+# ============================================================
+
 def validate_context(
     context: ResearchContext,
 ) -> list[ValidationMessage]:
@@ -84,18 +97,20 @@ def validate_context(
     messages: list[ValidationMessage] = []
 
     # =====================================================
-    # 1. Required fields
+    # 1. Required Fields
     # =====================================================
 
-    for field_name, display_name in REQUIRED_CONTEXT_FIELDS.items():
+    for field_name, display_name in (
+        REQUIRED_CONTEXT_FIELDS.items()
+    ):
 
         value = getattr(
             context,
             field_name,
             "",
-        ).strip()
+        )
 
-        if not value:
+        if not str(value).strip():
 
             messages.append(
                 ValidationMessage(
@@ -105,11 +120,19 @@ def validate_context(
                 )
             )
 
+    # Stop early if required fields are missing
+    if any(msg.level == "ERROR" for msg in messages):
+        return messages
+
     # =====================================================
     # 2. Data Source ↔ Study Design
     # =====================================================
 
-    if context.data_source and context.study_design:
+    if (
+        context.data_source
+        and context.study_design
+        and context.study_design != "Auto Detect"
+    ):
 
         allowed_designs = DATA_SOURCE_DESIGNS.get(
             context.data_source
@@ -117,8 +140,8 @@ def validate_context(
 
         if (
             allowed_designs
-            and context.study_design != "Auto Detect"
-            and context.study_design not in allowed_designs
+            and context.study_design
+            not in allowed_designs
         ):
 
             messages.append(
@@ -126,29 +149,36 @@ def validate_context(
                     level="ERROR",
                     field="study_design",
                     message=(
-                        f"'{context.study_design}' is not currently "
-                        f"supported with '{context.data_source}' "
-                        f"in the Phase 1 rule set."
+                        f"'{context.study_design}' is not supported "
+                        f"with '{context.data_source}'."
                     ),
                 )
             )
 
     # =====================================================
-    # 3. Research Goal ↔ Outcome
+    # 3. Goal ↔ Outcome Consistency
     # =====================================================
 
-    if context.research_goal and context.outcome:
+    if (
+        context.research_goal
+        and context.outcome
+    ):
 
-        expected_categories = GOAL_OUTCOME_CATEGORIES.get(
-            context.research_goal
+        expected_categories = (
+            GOAL_OUTCOME_CATEGORIES.get(
+                context.research_goal
+            )
         )
 
-        detected_categories = _detect_outcome_categories(
-            context.outcome
+        detected_categories = (
+            _detect_outcome_categories(
+                context.outcome
+            )
         )
 
         if (
             expected_categories
+            and detected_categories
             and not (
                 expected_categories
                 & detected_categories
@@ -160,17 +190,15 @@ def validate_context(
                     level="WARNING",
                     field="outcome",
                     message=(
-                        f"The outcome '{context.outcome}' may not "
-                        f"match the research goal "
-                        f"'{context.research_goal}'. "
-                        f"Please confirm that the outcome directly "
-                        f"answers the stated research goal."
+                        f"The outcome may not fully align "
+                        f"with the selected research goal "
+                        f"('{context.research_goal}')."
                     ),
                 )
             )
 
     # =====================================================
-    # 4. Research Goal ↔ Study Design
+    # 4. Goal ↔ Study Design
     # =====================================================
 
     if (
@@ -179,8 +207,10 @@ def validate_context(
         and context.study_design != "Auto Detect"
     ):
 
-        recommended_designs = GOAL_STUDY_DESIGNS.get(
-            context.research_goal
+        recommended_designs = (
+            GOAL_STUDY_DESIGNS.get(
+                context.research_goal
+            )
         )
 
         if (
@@ -196,9 +226,7 @@ def validate_context(
                     message=(
                         f"'{context.study_design}' is not among "
                         f"the usual study designs for "
-                        f"'{context.research_goal}'. "
-                        f"Review whether the design is appropriate "
-                        f"for the research objective."
+                        f"'{context.research_goal}'."
                     ),
                 )
             )
@@ -207,42 +235,42 @@ def validate_context(
     # 5. Goal-Specific Required Fields
     # =====================================================
 
-    if context.research_goal:
-
-        required_fields = GOAL_REQUIRED_FIELDS.get(
+    required_fields = (
+        GOAL_REQUIRED_FIELDS.get(
             context.research_goal,
             set(),
         )
+    )
 
-        for field_name in required_fields:
+    for field_name in required_fields:
 
-            value = getattr(
-                context,
-                field_name,
-                "",
-            ).strip()
+        value = getattr(
+            context,
+            field_name,
+            "",
+        )
 
-            if not value:
+        if not str(value).strip():
 
-                display_name = (
-                    field_name
-                    .replace("_", " ")
-                    .title()
+            display_name = (
+                field_name
+                .replace("_", " ")
+                .title()
+            )
+
+            messages.append(
+                ValidationMessage(
+                    level="ERROR",
+                    field=field_name,
+                    message=(
+                        f"{display_name} is required "
+                        f"for '{context.research_goal}'."
+                    ),
                 )
-
-                messages.append(
-                    ValidationMessage(
-                        level="ERROR",
-                        field=field_name,
-                        message=(
-                            f"{display_name} is required "
-                            f"for '{context.research_goal}'."
-                        ),
-                    )
-                )
+            )
 
     # =====================================================
-    # 6. Optional Information
+    # 6. Optional Context Warnings
     # =====================================================
 
     if not context.location.strip():
@@ -251,7 +279,9 @@ def validate_context(
             ValidationMessage(
                 level="WARNING",
                 field="location",
-                message="Study location has not been specified.",
+                message=(
+                    "Study location has not been specified."
+                ),
             )
         )
 
@@ -261,7 +291,9 @@ def validate_context(
             ValidationMessage(
                 level="WARNING",
                 field="study_period",
-                message="Study period has not been specified.",
+                message=(
+                    "Study period has not been specified."
+                ),
             )
         )
 
