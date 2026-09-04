@@ -32,7 +32,7 @@ class ResearchContext:
     # --------------------------------------------------------
     # Step 2
     # --------------------------------------------------------
-    final_research_idea: str = ""
+    final_research: str = ""
     final_research_rationale: str = ""
 
     # --------------------------------------------------------
@@ -76,14 +76,14 @@ class ValidationMessage:
 
 
 # ============================================================
-# STEP 2 — RESEARCH IDEA
+# STEP 2 — RESEARCH CANDIDATE
 # ============================================================
 
 @dataclass
-class ResearchIdea:
+class ResearchCandidate:
     """
-    Represents one research idea generated from
-    the structured research context.
+    Represents one candidate research project
+    generated from the structured research context.
     """
 
     title: str
@@ -131,14 +131,14 @@ class ResearchProject:
     # --------------------------------------------------------
     # Step 2
     # --------------------------------------------------------
-    generated_ideas: List[
-        ResearchIdea
+    generated_candidates: List[
+        ResearchCandidate
     ] = field(
         default_factory=list
     )
 
-    selected_idea: Optional[
-        ResearchIdea
+    selected_candidate: Optional[
+        ResearchCandidate
     ] = None
 
     # --------------------------------------------------------
@@ -173,41 +173,41 @@ class ResearchProject:
     # Step 2 Helpers
     # ========================================================
 
-    def clear_ideas(self) -> None:
+    def clear_candidates(self) -> None:
 
-        self.generated_ideas.clear()
+        self.generated_candidates.clear()
 
-        self.selected_idea = None
+        self.selected_candidate = None
 
-        self.context.final_research_idea = ""
+        self.context.final_research = ""
         self.context.final_research_rationale = ""
 
-    def select_idea(
+    def select_candidate(
         self,
         index: int,
     ) -> None:
         """
-        Select an idea by its index
+        Select a candidate by index
         and save it into the project context.
         """
 
         if not (
             0 <= index < len(
-                self.generated_ideas
+                self.generated_candidates
             )
         ):
             return
 
-        self.selected_idea = (
-            self.generated_ideas[index]
+        self.selected_candidate = (
+            self.generated_candidates[index]
         )
 
-        self.context.final_research_idea = (
-            self.selected_idea.title
+        self.context.final_research = (
+            self.selected_candidate.title
         )
 
         self.context.final_research_rationale = (
-            self.selected_idea.rationale
+            self.selected_candidate.rationale
         )
 
     # ========================================================
@@ -215,13 +215,13 @@ class ResearchProject:
     # ========================================================
 
     @property
-    def has_selected_idea(self) -> bool:
+    def has_selected_candidate(self) -> bool:
         return (
-            self.selected_idea is not None
+            self.selected_candidate is not None
         )
 
     @property
     def step3_ready(self) -> bool:
         return bool(
-            self.context.final_research_idea
+            self.context.final_research
         )
