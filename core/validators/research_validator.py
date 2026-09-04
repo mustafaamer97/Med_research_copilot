@@ -9,6 +9,7 @@ from core.rules.research_rules import (
     OUTCOME_KEYWORDS,
     GOAL_OUTCOME_CATEGORIES,
     GOAL_STUDY_DESIGNS,
+    GOAL_REQUIRED_FIELDS,
 )
 
 
@@ -88,7 +89,11 @@ def validate_context(
 
     for field_name, display_name in REQUIRED_CONTEXT_FIELDS.items():
 
-        value = getattr(context, field_name, "").strip()
+        value = getattr(
+            context,
+            field_name,
+            "",
+        ).strip()
 
         if not value:
 
@@ -142,8 +147,12 @@ def validate_context(
             context.outcome
         )
 
-        if expected_categories and not (
-            expected_categories & detected_categories
+        if (
+            expected_categories
+            and not (
+                expected_categories
+                & detected_categories
+            )
         ):
 
             messages.append(
@@ -176,7 +185,8 @@ def validate_context(
 
         if (
             recommended_designs
-            and context.study_design not in recommended_designs
+            and context.study_design
+            not in recommended_designs
         ):
 
             messages.append(
@@ -194,7 +204,45 @@ def validate_context(
             )
 
     # =====================================================
-    # 5. Optional information
+    # 5. Goal-Specific Required Fields
+    # =====================================================
+
+    if context.research_goal:
+
+        required_fields = GOAL_REQUIRED_FIELDS.get(
+            context.research_goal,
+            set(),
+        )
+
+        for field_name in required_fields:
+
+            value = getattr(
+                context,
+                field_name,
+                "",
+            ).strip()
+
+            if not value:
+
+                display_name = (
+                    field_name
+                    .replace("_", " ")
+                    .title()
+                )
+
+                messages.append(
+                    ValidationMessage(
+                        level="ERROR",
+                        field=field_name,
+                        message=(
+                            f"{display_name} is required "
+                            f"for '{context.research_goal}'."
+                        ),
+                    )
+                )
+
+    # =====================================================
+    # 6. Optional Information
     # =====================================================
 
     if not context.location.strip():
