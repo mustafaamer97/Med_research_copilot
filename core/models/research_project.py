@@ -44,7 +44,7 @@ class ResearchContext:
 
     research_hypothesis: str = ""
 
-    framework: dict = field(
+    framework: dict[str, str] = field(
         default_factory=dict
     )
 
@@ -55,7 +55,7 @@ class ResearchContext:
     # --------------------------------------------------------
     # Step 4 (future)
     # --------------------------------------------------------
-    retrieved_articles: list = field(
+    retrieved_articles: List[dict] = field(
         default_factory=list
     )
 
